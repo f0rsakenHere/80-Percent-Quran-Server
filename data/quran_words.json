@@ -1,0 +1,82 @@
+[
+    {
+        "id": 1,
+        "arabic": "ٱللَّهِ",
+        "translation": "Allah",
+        "transliteration": "Allah",
+        "frequency": 2699,
+        "type": "Noun"
+    },
+    {
+        "id": 2,
+        "arabic": "قَالَ",
+        "translation": "He said",
+        "transliteration": "Qala",
+        "frequency": 529,
+        "type": "Verb"
+    },
+    {
+        "id": 3,
+        "arabic": "ٱلَّذِينَ",
+        "translation": "Those who",
+        "transliteration": "Alladhina",
+        "frequency": 1250,
+        "type": "Pronoun"
+    },
+    {
+        "id": 4,
+        "arabic": "مِن",
+        "translation": "From",
+        "transliteration": "Min",
+        "frequency": 3226,
+        "type": "Preposition"
+    },
+    {
+        "id": 5,
+        "arabic": "إِلَىٰ",
+        "translation": "To, Towards",
+        "transliteration": "Ila",
+        "frequency": 742,
+        "type": "Preposition"
+    },
+    {
+        "id": 6,
+        "arabic": "كَانَ",
+        "translation": "He was",
+        "transliteration": "Kana",
+        "frequency": 1358,
+        "type": "Verb"
+    },
+    {
+        "id": 7,
+        "arabic": "يَوْمَ",
+        "translation": "Day",
+        "transliteration": "Yawm",
+        "frequency": 365,
+        "type": "Noun"
+    },
+    {
+        "id": 8,
+        "arabic": "رَبِّ",
+        "translation": "Lord",
+        "transliteration": "Rabb",
+        "frequency": 967,
+        "type": "Noun"
+    },
+    {
+        "id": 9,
+        "arabic": "كُلُّ",
+        "translation": "All, Every",
+        "transliteration": "Kull",
+        "frequency": 359,
+        "type": "Adjective"
+    },
+    {
+        "id": 10,
+        "arabic": "شَيْءٍ",
+        "translation": "Thing",
+        "transliteration": "Shay",
+        "frequency": 338,
+        "type": "Noun"
+    }
+]
