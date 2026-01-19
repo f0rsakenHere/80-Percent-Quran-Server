@@ -7,6 +7,14 @@ const User = require('../models/User');
  */
 const authMiddleware = async (req, res, next) => {
   try {
+    // Check if Firebase is initialized
+    if (!admin.apps.length) {
+      return res.status(503).json({
+        success: false,
+        message: 'Authentication service not configured. Please contact administrator.',
+      });
+    }
+
     // Extract token from Authorization header
     const authHeader = req.headers.authorization;
 

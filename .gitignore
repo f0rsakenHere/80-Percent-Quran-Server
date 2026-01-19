@@ -25,3 +25,13 @@ Thumbs.db
 # Build files
 dist/
 build/
+
+# Documentation
+*.md
+!README.md
+
+# User specific
+*.code-workspace
+
+# Temp scripts
+debug-quran-api.js

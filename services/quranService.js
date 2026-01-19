@@ -67,11 +67,13 @@ class QuranService {
       
       const params = new URLSearchParams();
       params.append('grant_type', 'client_credentials');
-      params.append('client_id', this.clientId);
-      params.append('client_secret', this.clientSecret);
+      params.append('scope', 'content');
+
+      const authHeader = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64');
 
       const response = await axios.post(tokenUrl, params, {
         headers: {
+          'Authorization': `Basic ${authHeader}`,
           'Content-Type': 'application/x-www-form-urlencoded',
         },
       });
@@ -108,70 +110,77 @@ class QuranService {
    * @returns {Promise<Object>} Search results with verses
    */
   async getVerses(arabicWord, size = 2) {
+    console.log(`🔍 Fetching verses for: ${arabicWord}, size: ${size}`);
     try {
-      // Ensure we have a valid token
       const token = await this.ensureValidToken();
 
-      // Make the API request
+      // 1. Search for the word to get Verse Keys
       const searchUrl = `${this.apiBaseUrl}/content/api/v4/search`;
-      
-      const response = await axios.get(searchUrl, {
+      const searchResponse = await axios.get(searchUrl, {
         params: {
           q: arabicWord,
           size: size,
-          language: 'en',
+          language: 'en'
         },
         headers: {
-          Authorization: `Bearer ${token}`,
+          'x-auth-token': token,
+          'x-client-id': this.clientId,
           'Content-Type': 'application/json',
         },
       });
 
-      return {
-        success: true,
-        data: response.data,
-        query: arabicWord,
-      };
-    } catch (error) {
-      console.error('❌ Error fetching verses:', error.response?.data || error.message);
-
-      // If authentication error, clear token and retry once
-      if (error.response?.status === 401 && this.accessToken) {
-        console.log('⚠️  Authentication error, clearing token and retrying...');
-        this.accessToken = null;
-        this.tokenExpiry = null;
-        
-        // Retry once
-        try {
-          const token = await this.ensureValidToken();
-          const searchUrl = `${this.apiBaseUrl}/content/api/v4/search`;
-          
-          const response = await axios.get(searchUrl, {
-            params: {
-              q: arabicWord,
-              size: size,
-              language: 'en',
-            },
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          });
-
-          return {
-            success: true,
-            data: response.data,
-            query: arabicWord,
-          };
-        } catch (retryError) {
-          throw retryError;
-        }
+      const searchResults = searchResponse.data.search ? searchResponse.data.search.results : [];
+      
+      if (!searchResults.length) {
+        return { success: true, data: { search: { results: [] } }, query: arabicWord };
       }
 
-      throw new Error(
-        error.response?.data?.message || 
-        'Failed to fetch verses from Quran Foundation API'
+      // 2. Fetch full details (with translation) for each verse found
+      // We limit this to the requested 'size' to avoid too many requests
+      const detailedVerses = await Promise.all(
+        searchResults.map(async (result) => {
+          try {
+            const verseKey = result.verse_key;
+            // Fetch verse details with Saheeh International (131)
+            const detailsUrl = `${this.apiBaseUrl}/content/api/v4/verses/by_key/${verseKey}`;
+            const detailsResponse = await axios.get(detailsUrl, {
+              params: {
+                language: 'en',
+                words: true,
+                translations: 131, 
+                fields: 'text_uthmani,text_indopak'
+              },
+              headers: {
+                'x-auth-token': token,
+                'x-client-id': this.clientId,
+              }
+            });
+            return detailsResponse.data.verse;
+          } catch (err) {
+            console.error(`Error fetching details for ${result.verse_key}:`, err.message);
+            return null; // Skip failed ones
+          }
+        })
       );
+
+      // Filter out nulls
+      const validVerses = detailedVerses.filter(v => v !== null);
+
+      // Return in a structure mimicking the search response for frontend compatibility
+      return {
+        success: true,
+        data: {
+          search: {
+            results: validVerses
+          }
+        },
+        query: arabicWord,
+      };
+
+    } catch (error) {
+      console.error('❌ Error in getVerses:', error.message);
+      // Simplify error handling for now to bubble up
+      throw new Error('Failed to fetch verses from Quran Foundation API');
     }
   }
 
@@ -183,14 +192,15 @@ class QuranService {
   async getVerseDetails(verseRef) {
     try {
       const token = await this.ensureValidToken();
-      const verseUrl = `${this.apiBaseUrl}/content/api/v4/verses/${verseRef}`;
+      const verseUrl = `${this.apiBaseUrl}/content/api/v4/verses/by_key/${verseRef}`;
 
       const response = await axios.get(verseUrl, {
         params: {
           language: 'en',
         },
         headers: {
-          Authorization: `Bearer ${token}`,
+          'x-auth-token': token,      // ✅ REQUIRED
+          'x-client-id': this.clientId, // ✅ REQUIRED
           'Content-Type': 'application/json',
         },
       });

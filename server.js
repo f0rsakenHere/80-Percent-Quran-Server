@@ -21,14 +21,19 @@ const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const app = express();
 
 // Environment variables validation
+// Environment variables validation
 const requiredEnvVars = [
   'MONGO_URI',
-  'FIREBASE_SERVICE_ACCOUNT',
   'QF_CLIENT_ID',
   'QF_CLIENT_SECRET',
 ];
 
 const missingEnvVars = requiredEnvVars.filter((envVar) => !process.env[envVar]);
+
+// Check for at least one Firebase config
+if (!process.env.FIREBASE_SERVICE_ACCOUNT && !process.env.FIREBASE_CONFIG_JSON) {
+  missingEnvVars.push('FIREBASE_CONFIG_JSON (or FIREBASE_SERVICE_ACCOUNT)');
+}
 
 if (missingEnvVars.length > 0) {
   console.error('❌ Missing required environment variables:', missingEnvVars.join(', '));
@@ -46,13 +51,15 @@ app.use(helmet());
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = process.env.CORS_ORIGINS 
-      ? process.env.CORS_ORIGINS.split(',')
+      ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
       : ['http://localhost:3000', 'http://localhost:5173'];
     
     // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
+      console.log('🚫 CORS Blocked Origin:', origin);
+      console.log('✅ Allowed Origins:', allowedOrigins); // Debug log
       callback(new Error('Not allowed by CORS'));
     }
   },
