@@ -35,3 +35,5 @@ build/
 
 # Temp scripts
 debug-quran-api.js
+check-db.js
+check-json.js
