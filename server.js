@@ -13,6 +13,7 @@ const initializeFirebase = require('./config/firebase');
 const wordRoutes = require('./routes/wordRoutes');
 const progressRoutes = require('./routes/progressRoutes');
 const quranRoutes = require('./routes/quranRoutes');
+const storyRoutes = require('./routes/storyRoutes');
 
 // Import middleware
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
@@ -109,6 +110,7 @@ app.get('/health', (req, res) => {
 app.use('/api/words', wordRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/api/quran', quranRoutes);
+app.use('/api/stories', storyRoutes);
 
 // 404 handler
 app.use(notFoundHandler);
