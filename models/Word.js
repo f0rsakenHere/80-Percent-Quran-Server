@@ -22,6 +22,14 @@ const wordSchema = new mongoose.Schema(
       required: [true, 'Translation is required'],
       trim: true,
     },
+    english: {
+      type: String,
+      trim: true,
+    },
+    bangla: {
+      type: String,
+      trim: true,
+    },
     transliteration: {
       type: String,
       required: [true, 'Transliteration is required'],
@@ -36,10 +44,7 @@ const wordSchema = new mongoose.Schema(
     type: {
       type: String,
       required: [true, 'Word type is required'],
-      enum: {
-        values: ['Noun', 'Verb', 'Particle', 'Adjective', 'Pronoun', 'Preposition', 'Other'],
-        message: '{VALUE} is not a valid word type',
-      },
+      // Removed enum validation to allow for variations in source file
       trim: true,
     },
   },

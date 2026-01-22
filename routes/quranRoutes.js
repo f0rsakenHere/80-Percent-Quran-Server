@@ -10,7 +10,8 @@ const { optionalAuth } = require('../middleware/authMiddleware');
  */
 router.get('/examples', optionalAuth, async (req, res, next) => {
   try {
-    const { word, size = 2 } = req.query;
+    // Default to Bengali (161) + English (131)
+    const { word, size = 2, translations = '161,131', page = 1 } = req.query;
 
     if (!word) {
       return res.status(400).json({
@@ -28,13 +29,33 @@ router.get('/examples', optionalAuth, async (req, res, next) => {
       });
     }
 
-    // Call Quran Service
-    const result = await quranService.getVerses(word, requestedSize);
+    // Validate translations parameter (can be comma-separated IDs)
+    // Accept both single number or comma-separated string
+    const translationIds = translations.toString();
+    if (!translationIds || translationIds.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        message: 'Translation IDs are required',
+      });
+    }
+
+    // Validate page parameter
+    const requestedPage = parseInt(page);
+    if (isNaN(requestedPage) || requestedPage < 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'Page must be a number greater than 0',
+      });
+    }
+
+    // Call Quran Service with translation IDs and page
+    const result = await quranService.getVerses(word, requestedSize, translationIds, requestedPage);
 
     res.json({
       success: true,
       data: result.data,
       query: result.query,
+      pagination: result.pagination,
     });
   } catch (error) {
     console.error('❌ Error in /api/quran/examples:', error.message);
@@ -50,6 +71,8 @@ router.get('/examples', optionalAuth, async (req, res, next) => {
 router.get('/verse/:reference', optionalAuth, async (req, res, next) => {
   try {
     const { reference } = req.params;
+    // Default to Bengali (161) + English (131)
+    const { translations = '161,131' } = req.query;
 
     if (!reference) {
       return res.status(400).json({
@@ -67,8 +90,17 @@ router.get('/verse/:reference', optionalAuth, async (req, res, next) => {
       });
     }
 
-    // Call Quran Service
-    const result = await quranService.getVerseDetails(reference);
+    // Validate translations parameter (can be comma-separated IDs)
+    const translationIds = translations.toString();
+    if (!translationIds || translationIds.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        message: 'Translation IDs are required',
+      });
+    }
+
+    // Call Quran Service with translation IDs
+    const result = await quranService.getVerseDetails(reference, translationIds);
 
     res.json({
       success: true,

@@ -150,6 +150,8 @@ router.get('/search/:query', optionalAuth, async (req, res, next) => {
       $or: [
         { arabic: searchRegex },
         { translation: searchRegex },
+        { english: searchRegex },
+        { bangla: searchRegex },
         { transliteration: searchRegex },
       ],
     })

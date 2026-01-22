@@ -57,7 +57,13 @@ const seedDatabase = async () => {
   try {
     console.log('🌱 Starting database seeding...\n');
     await connectDB();
-    const words = loadWordsFromFile();
+    const loadedWords = loadWordsFromFile();
+    const words = loadedWords.map(word => ({
+      ...word,
+      translation: word.english, // Map english to translation for backward compatibility
+      english: word.english,
+      bangla: word.bangla
+    }));
 
     // Clear existing words
     const deleteResult = await Word.deleteMany({});
