@@ -113,33 +113,73 @@ router.get('/verse/:reference', optionalAuth, async (req, res, next) => {
 });
 
 /**
+ * @route   GET /api/quran/chapters
+ * @desc    List all 114 chapters (surahs) with metadata
+ * @access  Public
+ */
+router.get('/chapters', async (req, res, next) => {
+  try {
+    const result = await quranService.getChapters();
+    res.json({ success: true, data: result.chapters });
+  } catch (error) {
+    console.error('❌ Error in /api/quran/chapters:', error.message);
+    next(error);
+  }
+});
+
+/**
+ * @route   GET /api/quran/chapter/:id
+ * @desc    Get verses for a chapter (with word-by-word tokens), paginated
+ * @access  Public
+ */
+router.get('/chapter/:id', async (req, res, next) => {
+  try {
+    const chapterNumber = parseInt(req.params.id);
+    if (isNaN(chapterNumber) || chapterNumber < 1 || chapterNumber > 114) {
+      return res.status(400).json({
+        success: false,
+        message: 'Chapter must be a number between 1 and 114',
+      });
+    }
+
+    const { translations = '131,161' } = req.query;
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const perPage = Math.min(Math.max(parseInt(req.query.perPage) || 20, 1), 50);
+
+    const result = await quranService.getChapterVerses(
+      chapterNumber,
+      translations.toString(),
+      page,
+      perPage
+    );
+
+    res.json({
+      success: true,
+      data: { verses: result.verses, pagination: result.pagination },
+    });
+  } catch (error) {
+    console.error('❌ Error in /api/quran/chapter:', error.message);
+    next(error);
+  }
+});
+
+/**
  * @route   GET /api/quran/health
  * @desc    Check if Quran API service is accessible
  * @access  Public
  */
-router.get('/health', async (req, res, next) => {
-  try {
-    // Try to get a token to verify API connectivity
-    const token = await quranService.ensureValidToken();
-
-    res.json({
-      success: true,
-      message: 'Quran API service is accessible',
-      data: {
-        environment: quranService.environment,
-        authUrl: quranService.authUrl,
-        apiBaseUrl: quranService.apiBaseUrl,
-        tokenValid: quranService.isTokenValid(),
-      },
-    });
-  } catch (error) {
-    console.error('❌ Quran API health check failed:', error.message);
-    res.status(503).json({
-      success: false,
-      message: 'Quran API service is not accessible',
-      error: error.message,
-    });
-  }
+router.get('/health', async (req, res) => {
+  // Quran content is served from bundled local data — no external API to check.
+  res.json({
+    success: true,
+    message: 'Quran data is served locally (offline)',
+    data: {
+      environment: quranService.environment, // "local"
+      authUrl: quranService.authUrl,
+      apiBaseUrl: quranService.apiBaseUrl,
+      tokenValid: quranService.isTokenValid(),
+    },
+  });
 });
 
 module.exports = router;

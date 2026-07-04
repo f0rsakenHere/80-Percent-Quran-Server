@@ -1,4 +1,13 @@
 const mongoose = require('mongoose');
+const dns = require('dns');
+
+// Some local routers refuse DNS SRV queries, which breaks mongodb+srv:// Atlas
+// lookups. Prefer public resolvers so the SRV record resolves reliably.
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1', ...dns.getServers()]);
+} catch (_) {
+  // Non-fatal: fall back to the system resolver.
+}
 
 /**
  * Connect to MongoDB database

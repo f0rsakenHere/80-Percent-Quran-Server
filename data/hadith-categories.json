@@ -1,0 +1,104 @@
+[
+  {
+    "id": "faith",
+    "en": "Faith & Belief",
+    "bn": "ঈমান ও বিশ্বাস",
+    "count": 388
+  },
+  {
+    "id": "knowledge",
+    "en": "Knowledge & Quran",
+    "bn": "জ্ঞান ও কুরআন",
+    "count": 653
+  },
+  {
+    "id": "purification",
+    "en": "Purification",
+    "bn": "পবিত্রতা",
+    "count": 207
+  },
+  {
+    "id": "prayer",
+    "en": "Prayer",
+    "bn": "নামায",
+    "count": 827
+  },
+  {
+    "id": "funeral",
+    "en": "Death & Funerals",
+    "bn": "মৃত্যু ও জানাযা",
+    "count": 145
+  },
+  {
+    "id": "charity",
+    "en": "Charity (Zakat)",
+    "bn": "যাকাত ও দান",
+    "count": 109
+  },
+  {
+    "id": "hajj",
+    "en": "Hajj & Umrah",
+    "bn": "হজ্জ ও উমরাহ",
+    "count": 353
+  },
+  {
+    "id": "fasting",
+    "en": "Fasting",
+    "bn": "রোযা",
+    "count": 149
+  },
+  {
+    "id": "business",
+    "en": "Trade & Dealings",
+    "bn": "ব্যবসা ও লেনদেন",
+    "count": 492
+  },
+  {
+    "id": "justice",
+    "en": "Justice & Law",
+    "bn": "বিচার ও আইন",
+    "count": 534
+  },
+  {
+    "id": "jihad",
+    "en": "Struggle & Sacrifice",
+    "bn": "জিহাদ ও ত্যাগ",
+    "count": 382
+  },
+  {
+    "id": "prophets",
+    "en": "Prophets & Companions",
+    "bn": "নবী ও সাহাবা",
+    "count": 1173
+  },
+  {
+    "id": "marriage",
+    "en": "Marriage & Family",
+    "bn": "বিবাহ ও পরিবার",
+    "count": 296
+  },
+  {
+    "id": "food",
+    "en": "Food, Drink & Health",
+    "bn": "খাদ্য, পানীয় ও স্বাস্থ্য",
+    "count": 561
+  },
+  {
+    "id": "manners",
+    "en": "Manners & Supplication",
+    "bn": "আদব ও দোয়া",
+    "count": 581
+  },
+  {
+    "id": "heart",
+    "en": "Heart & the Hereafter",
+    "bn": "অন্তর ও আখিরাত",
+    "count": 255
+  },
+  {
+    "id": "general",
+    "en": "General",
+    "bn": "বিবিধ",
+    "count": 301
+  }
+]

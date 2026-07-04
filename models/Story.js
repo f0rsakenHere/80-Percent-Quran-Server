@@ -27,6 +27,13 @@ const storySchema = new mongoose.Schema(
       required: [true, 'Source is required'],
       trim: true,
     },
+    // Authentic Bengali translation (Sahih Bukhari, ben-bukhari edition)
+    bangla: { type: String, default: '' },
+    // Bukhari book number + name this hadith belongs to
+    book: { type: Number, default: 0 },
+    bookName: { type: String, default: '' },
+    // Topical category id (see data/hadith-categories.json)
+    category: { type: String, default: 'general', index: true },
   },
   {
     timestamps: true,

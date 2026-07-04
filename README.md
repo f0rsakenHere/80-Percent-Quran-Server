@@ -8,7 +8,7 @@ Production-ready Express.js backend for the Ramadan Vocabulary App. This API hel
 - **Framework:** Express.js
 - **Database:** MongoDB (Mongoose ODM)
 - **Authentication:** Firebase Authentication (Admin SDK)
-- **External API:** Quran Foundation API (OAuth2 Client Credentials Flow)
+- **Quran data:** Bundled OFFLINE (data/quran/) — no third-party Quran API at runtime. See `OFFLINE_QURAN.md`.
 
 ## 📋 Features
 

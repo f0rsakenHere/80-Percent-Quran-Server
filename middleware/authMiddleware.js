@@ -62,6 +62,19 @@ const authMiddleware = async (req, res, next) => {
       });
     }
 
+    // Anti-abuse: email/password accounts must verify their email before they
+    // can use protected (write) endpoints. Federated providers (Google) and
+    // already-verified users pass through. This stops throwaway/fake signups
+    // from writing data.
+    const provider = decodedToken.firebase?.sign_in_provider;
+    if (provider === 'password' && decodedToken.email_verified !== true) {
+      return res.status(403).json({
+        success: false,
+        code: 'EMAIL_NOT_VERIFIED',
+        message: 'Please verify your email address to continue.',
+      });
+    }
+
     // Find or create user in database
     const userData = {
       uid: decodedToken.uid,

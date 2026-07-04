@@ -1,7 +1,60 @@
 const express = require('express');
 const router = express.Router();
 const Word = require('../models/Word');
+const AppState = require('../models/AppState');
 const { authMiddleware } = require('../middleware/authMiddleware');
+const { matchToken } = require('../services/wordIndex');
+
+// Cross-device sync for opaque client progress blobs (Journey / Hifz).
+const STATE_KEYS = ['journey', 'hifz'];
+
+/**
+ * @route   GET /api/progress/state/:key
+ * @desc    Fetch the user's synced state blob for a key
+ * @access  Private
+ */
+router.get('/state/:key', authMiddleware, async (req, res, next) => {
+  try {
+    const key = String(req.params.key);
+    if (!STATE_KEYS.includes(key)) {
+      return res.status(400).json({ success: false, message: 'Invalid state key' });
+    }
+    const doc = await AppState.findOne({ uid: req.user.uid, key }).lean();
+    res.json({
+      success: true,
+      data: doc ? doc.data : null,
+      clientUpdatedAt: doc ? doc.clientUpdatedAt : 0,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @route   PUT /api/progress/state/:key
+ * @desc    Upsert the user's synced state blob for a key
+ * @access  Private
+ */
+router.put('/state/:key', authMiddleware, async (req, res, next) => {
+  try {
+    const key = String(req.params.key);
+    if (!STATE_KEYS.includes(key)) {
+      return res.status(400).json({ success: false, message: 'Invalid state key' });
+    }
+    const { data, clientUpdatedAt } = req.body;
+    if (data == null || typeof data !== 'object') {
+      return res.status(400).json({ success: false, message: 'data must be an object' });
+    }
+    await AppState.findOneAndUpdate(
+      { uid: req.user.uid, key },
+      { data, clientUpdatedAt: Number(clientUpdatedAt) || 0 },
+      { upsert: true, setDefaultsOnInsert: true }
+    );
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * @route   POST /api/progress
@@ -88,11 +141,8 @@ router.delete('/:wordId', authMiddleware, async (req, res, next) => {
       });
     }
 
-    // Remove word from learned list
-    req.user.learnedWords = req.user.learnedWords.filter((id) => id !== wordId);
-    req.user.totalFrequencyKnown -= word.frequency;
-    req.user.lastActive = new Date();
-    await req.user.save();
+    // Remove word from learned list (atomic / race-safe)
+    await req.user.removeLearnedWord(wordId, word.frequency);
 
     res.json({
       success: true,
@@ -145,7 +195,9 @@ router.get('/stats', authMiddleware, async (req, res, next) => {
         ...stats,
         totalAvailableWords: totalWords,
         quranCoveragePercentage: parseFloat(coveragePercentage),
-        progressPercentage: ((req.user.learnedWords.length / totalWords) * 100).toFixed(2),
+        progressPercentage: totalWords > 0
+          ? parseFloat(((req.user.learnedWords.length / totalWords) * 100).toFixed(2))
+          : 0,
         recentlyLearned: sortedRecentWords,
       },
     });
@@ -161,13 +213,16 @@ router.get('/stats', authMiddleware, async (req, res, next) => {
  */
 router.get('/learned', authMiddleware, async (req, res, next) => {
   try {
-    const { page = 1, limit = 50 } = req.query;
+    const parsedPage = parseInt(req.query.page);
+    const parsedLimit = parseInt(req.query.limit);
+    const page = isNaN(parsedPage) || parsedPage < 1 ? 1 : parsedPage;
+    const limit = isNaN(parsedLimit) || parsedLimit < 1 ? 50 : Math.min(parsedLimit, 100);
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const skip = (page - 1) * limit;
     const learnedWordIds = req.user.learnedWords;
 
     // Get paginated learned words
-    const paginatedIds = learnedWordIds.slice(skip, skip + parseInt(limit));
+    const paginatedIds = learnedWordIds.slice(skip, skip + limit);
 
     const words = await Word.find({ id: { $in: paginatedIds } })
       .sort({ frequency: -1 })
@@ -178,10 +233,10 @@ router.get('/learned', authMiddleware, async (req, res, next) => {
       data: {
         words,
         pagination: {
-          currentPage: parseInt(page),
-          totalPages: Math.ceil(learnedWordIds.length / parseInt(limit)),
+          currentPage: page,
+          totalPages: Math.ceil(learnedWordIds.length / limit),
           totalLearned: learnedWordIds.length,
-          wordsPerPage: parseInt(limit),
+          wordsPerPage: limit,
         },
       },
     });
@@ -206,8 +261,15 @@ router.post('/batch', authMiddleware, async (req, res, next) => {
       });
     }
 
+    // Cap + sanitize: only numeric ids, deduped, at most 100 per request
+    // (prevents an authenticated user from loading the DB with a huge array).
+    const ids = [...new Set(wordIds.filter((n) => Number.isInteger(n)))].slice(0, 100);
+    if (ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'No valid word ids provided' });
+    }
+
     // Find all words
-    const words = await Word.find({ id: { $in: wordIds } });
+    const words = await Word.find({ id: { $in: ids } });
 
     if (words.length === 0) {
       return res.status(404).json({
@@ -232,6 +294,149 @@ router.post('/batch', authMiddleware, async (req, res, next) => {
         addedCount,
         totalWordsLearned: req.user.learnedWords.length,
         totalFrequencyKnown: req.user.totalFrequencyKnown,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @route   POST /api/progress/match-learn
+ * @desc    Match a raw Quran verse token to an app vocabulary word and mark it
+ *          learned. Used by the Reader's tap-to-add-to-deck action.
+ * @access  Private
+ */
+router.post('/match-learn', authMiddleware, async (req, res, next) => {
+  try {
+    const { arabic } = req.body;
+    if (!arabic || typeof arabic !== 'string') {
+      return res.status(400).json({ success: false, message: 'arabic token is required' });
+    }
+
+    const match = await matchToken(arabic);
+    if (!match) {
+      return res.status(404).json({
+        success: false,
+        message: 'This word is not in the vocabulary list yet',
+      });
+    }
+
+    const alreadyLearned = req.user.hasLearnedWord(match.id);
+    if (!alreadyLearned) {
+      await req.user.addLearnedWord(match.id, match.frequency);
+    }
+
+    const word = await Word.findOne({ id: match.id })
+      .select('id arabic translation transliteration bangla english frequency type')
+      .lean();
+
+    res.json({
+      success: true,
+      message: alreadyLearned ? 'Already in your deck' : 'Added to your deck',
+      data: {
+        word,
+        alreadyLearned,
+        totalWordsLearned: req.user.learnedWords.length,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @route   GET /api/progress/vocabulary
+ * @desc    Get the user's entire learned vocabulary (id + arabic only) for
+ *          client-side comprehension matching. Small payload, no pagination.
+ * @access  Private
+ */
+router.get('/vocabulary', authMiddleware, async (req, res, next) => {
+  try {
+    const words = await Word.find({ id: { $in: req.user.learnedWords } })
+      .select('id arabic')
+      .lean();
+
+    res.json({
+      success: true,
+      data: { words, count: words.length },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @route   GET /api/progress/reviews/due
+ * @desc    Get words due for spaced-repetition review
+ * @access  Private
+ */
+router.get('/reviews/due', authMiddleware, async (req, res, next) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 50);
+    const now = new Date();
+
+    const dueIds = req.user.getDueWordIds(now);
+    const totalDue = dueIds.length;
+    const batchIds = dueIds.slice(0, limit);
+
+    const words = await Word.find({ id: { $in: batchIds } })
+      .select('id arabic translation transliteration bangla english frequency type')
+      .lean();
+
+    // Preserve the due order (most overdue first is fine; keep id order here)
+    const byId = new Map(words.map((w) => [w.id, w]));
+    const orderedWords = batchIds.map((id) => byId.get(id)).filter(Boolean);
+
+    res.json({
+      success: true,
+      data: {
+        words: orderedWords,
+        totalDue,
+        count: orderedWords.length,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @route   POST /api/progress/reviews/:wordId
+ * @desc    Submit a spaced-repetition grade for a word
+ * @access  Private
+ */
+router.post('/reviews/:wordId', authMiddleware, async (req, res, next) => {
+  try {
+    const wordId = parseInt(req.params.wordId);
+    const { quality } = req.body;
+
+    if (isNaN(wordId)) {
+      return res.status(400).json({ success: false, message: 'Invalid word id' });
+    }
+    if (typeof quality !== 'number' || quality < 0 || quality > 5) {
+      return res.status(400).json({
+        success: false,
+        message: 'quality must be a number between 0 and 5',
+      });
+    }
+    if (!req.user.hasLearnedWord(wordId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Word must be learned before it can be reviewed',
+      });
+    }
+
+    const review = await req.user.gradeReview(wordId, quality);
+
+    res.json({
+      success: true,
+      message: 'Review recorded',
+      data: {
+        wordId,
+        interval: review.interval,
+        dueDate: review.dueDate,
+        ease: review.ease,
       },
     });
   } catch (error) {

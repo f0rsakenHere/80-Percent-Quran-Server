@@ -21,12 +21,16 @@ const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 // Initialize Express app
 const app = express();
 
+// Behind a reverse proxy (Vercel / nginx): trust the first proxy hop so the
+// rate limiter keys on the real client IP instead of collapsing every user
+// into the proxy's single IP bucket.
+app.set('trust proxy', 1);
+
 // Environment variables validation
-// Environment variables validation
+// NOTE: Quran content is now served from bundled local data (data/quran/),
+// so the Quran Foundation API credentials (QF_*) are no longer required.
 const requiredEnvVars = [
   'MONGO_URI',
-  'QF_CLIENT_ID',
-  'QF_CLIENT_SECRET',
 ];
 
 const missingEnvVars = requiredEnvVars.filter((envVar) => !process.env[envVar]);
@@ -78,10 +82,12 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Rate limiting
+// A single page (e.g. the Reader paginating verses) can make several requests,
+// so the per-window cap needs headroom. Configurable via RATE_LIMIT_MAX.
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.',
+  max: parseInt(process.env.RATE_LIMIT_MAX) || 1000,
+  message: { success: false, message: 'Too many requests from this IP, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 });

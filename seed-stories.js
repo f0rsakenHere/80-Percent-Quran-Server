@@ -1,14 +1,22 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+const dns = require('dns');
 const mongoose = require('mongoose');
 const Story = require('./models/Story');
+
+// Prefer public DNS so the mongodb+srv Atlas lookup works behind routers that
+// refuse SRV queries (same fix as config/db.js).
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1', ...dns.getServers()]);
+} catch (_) {}
 
 /**
  * Seed Database with Stories
  */
 
-const STORIES_FILE = path.join(__dirname, 'data', 'stories.json');
+// Enriched hadiths (Bengali + category) — produced by scripts/enrich-hadith.js
+const STORIES_FILE = path.join(__dirname, 'data', 'stories.enriched.json');
 
 /**
  * Connect to MongoDB

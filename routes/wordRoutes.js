@@ -3,6 +3,25 @@ const router = express.Router();
 const Word = require('../models/Word');
 const { authMiddleware, optionalAuth } = require('../middleware/authMiddleware');
 
+// Maximum number of records that can be requested in a single page
+const MAX_LIMIT = 100;
+
+// Clamp a user-supplied limit into the range [1, MAX_LIMIT]
+const clampLimit = (value, fallback) => {
+  const parsed = parseInt(value);
+  if (isNaN(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, MAX_LIMIT);
+};
+
+// Parse a user-supplied page number, defaulting to 1 and never below 1
+const parsePage = (value) => {
+  const parsed = parseInt(value);
+  return isNaN(parsed) || parsed < 1 ? 1 : parsed;
+};
+
+// Escape regex metacharacters so user input is matched literally (prevents ReDoS / injection)
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /**
  * @route   GET /api/words
  * @desc    Get all words with optional pagination and filtering
@@ -11,8 +30,6 @@ const { authMiddleware, optionalAuth } = require('../middleware/authMiddleware')
 router.get('/', optionalAuth, async (req, res, next) => {
   try {
     const {
-      page = 1,
-      limit = 50,
       type,
       minFreq,
       maxFreq,
@@ -20,11 +37,14 @@ router.get('/', optionalAuth, async (req, res, next) => {
       order = 'desc',
     } = req.query;
 
+    const page = parsePage(req.query.page);
+    const limit = clampLimit(req.query.limit, 50);
+
     // Build query
     const query = {};
 
     if (type) {
-      query.type = type;
+      query.type = String(type); // coerce so ?type[$ne]=x can't inject operators
     }
 
     if (minFreq || maxFreq) {
@@ -33,17 +53,19 @@ router.get('/', optionalAuth, async (req, res, next) => {
       if (maxFreq) query.frequency.$lte = parseInt(maxFreq);
     }
 
-    // Build sort object
+    // Build sort object — whitelist the sort field to avoid arbitrary/unindexed sorts.
+    const ALLOWED_SORT = ['frequency', 'id', 'type'];
+    const sortField = ALLOWED_SORT.includes(String(sortBy)) ? String(sortBy) : 'frequency';
     const sortOrder = order === 'asc' ? 1 : -1;
-    const sort = { [sortBy]: sortOrder };
+    const sort = { [sortField]: sortOrder };
 
     // Execute query with pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    
+    const skip = (page - 1) * limit;
+
     const [words, total] = await Promise.all([
       Word.find(query)
         .sort(sort)
-        .limit(parseInt(limit))
+        .limit(limit)
         .skip(skip)
         .lean(),
       Word.countDocuments(query),
@@ -61,10 +83,10 @@ router.get('/', optionalAuth, async (req, res, next) => {
       data: {
         words,
         pagination: {
-          currentPage: parseInt(page),
-          totalPages: Math.ceil(total / parseInt(limit)),
+          currentPage: page,
+          totalPages: Math.ceil(total / limit),
           totalWords: total,
-          wordsPerPage: parseInt(limit),
+          wordsPerPage: limit,
         },
       },
     });
@@ -80,7 +102,7 @@ router.get('/', optionalAuth, async (req, res, next) => {
  */
 router.get('/learn', authMiddleware, async (req, res, next) => {
   try {
-    const { limit = 10 } = req.query;
+    const limit = clampLimit(req.query.limit, 10);
 
     // Find words that are NOT in the user's learned words list
     // Sorted by frequency (most frequent first)
@@ -88,7 +110,7 @@ router.get('/learn', authMiddleware, async (req, res, next) => {
       id: { $nin: req.user.learnedWords },
     })
       .sort({ frequency: -1, id: 1 })
-      .limit(parseInt(limit))
+      .limit(limit)
       .lean();
 
     res.json({
@@ -142,9 +164,9 @@ router.get('/:id', optionalAuth, async (req, res, next) => {
 router.get('/search/:query', optionalAuth, async (req, res, next) => {
   try {
     const { query } = req.params;
-    const { limit = 20 } = req.query;
+    const limit = clampLimit(req.query.limit, 20);
 
-    const searchRegex = new RegExp(query, 'i');
+    const searchRegex = new RegExp(escapeRegex(query), 'i');
 
     const words = await Word.find({
       $or: [
@@ -156,7 +178,7 @@ router.get('/search/:query', optionalAuth, async (req, res, next) => {
       ],
     })
       .sort({ frequency: -1 })
-      .limit(parseInt(limit))
+      .limit(limit)
       .lean();
 
     // Mark learned words if authenticated
