@@ -45,8 +45,11 @@ if (missingEnvVars.length > 0) {
   process.exit(1);
 }
 
-// Initialize Database and Firebase
-connectDB();
+// Initialize Database and Firebase. The DB connect is best-effort here (warms
+// the cold start); each API request also awaits the cached connection below.
+// The .catch keeps a transient connect failure from tripping the
+// unhandledRejection handler and killing the serverless function.
+connectDB().catch((e) => console.error('Initial DB connect failed:', e.message));
 initializeFirebase();
 
 // Security middleware
@@ -110,6 +113,19 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
   });
+});
+
+// Ensure a live DB connection before any data route runs. With
+// bufferCommands:false, queries issued before connect would throw instead of
+// hanging — so we await the cached connection here and fail fast with 503 if
+// the database is genuinely unreachable.
+app.use('/api', async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    res.status(503).json({ success: false, message: 'Database temporarily unavailable' });
+  }
 });
 
 // API Routes
